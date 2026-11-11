@@ -1,0 +1,78 @@
+services:
+  # ========================================================
+  # ZooKeeper: Service Registry for Naming & Discovery
+  # ========================================================
+  zookeeper:
+    image: zookeeper:3.9
+    container_name: zookeeper-registry
+    ports:
+      - "2181:2181"
+    restart: always
+
+  # ========================================================
+  # bRPC Server Instance 1 (engine-node-alpha)
+  # ========================================================
+  brpc-server-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: brpc-server-1
+    command: >
+      brpc-server
+      --port=8001
+      --instance_name=engine-node-alpha
+      --idle_timeout_s=60
+    ports:
+      - "8001:8001"
+    depends_on:
+      - zookeeper
+    restart: always
+
+  # ========================================================
+  # bRPC Server Instance 2 (engine-node-beta)
+  # ========================================================
+  brpc-server-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: brpc-server-2
+    command: >
+      brpc-server
+      --port=8002
+      --instance_name=engine-node-beta
+      --idle_timeout_s=60
+    ports:
+      - "8002:8002"
+    depends_on:
+      - zookeeper
+    restart: always
+
+  # ========================================================
+  # bRPC Client: Consumer & Load-Balancer
+  # ========================================================
+  brpc-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: brpc-client
+    # In a dynamic environment, bRPC can load endpoints directly from file naming lists,
+    # or coordinate via naming proxies. Here we pass a static list list for demoing
+    # immediate round-robin and consistent hashing without external complexity.
+    entrypoint: >
+      /bin/sh -c "
+      echo 'brpc-server-1:8001' > /app/servers.txt &&
+      echo 'brpc-server-2:8002' >> /app/servers.txt &&
+      sleep 5 &&
+      brpc-client
+      --naming_service=file:///app/servers.txt
+      --load_balancer=c_murmurhash
+      --timeout_ms=1000
+      --max_retry=4
+      --backup_request_ms=10
+      --benchmark_threads=6
+      --benchmark_seconds=15
+      "
+    depends_on:
+      - brpc-server-1
+      - brpc-server-2
+    restart: on-failure

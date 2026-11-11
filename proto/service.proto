@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package matching;
+
+// Ensures optimized code generation for C++ execution
+option cc_generic_services = true;
+
+// Side of the order in the high-frequency matching engine
+enum OrderSide {
+  BUY = 0;
+  SELL = 1;
+}
+
+// Type of order execution constraints
+enum OrderType {
+  LIMIT = 0;
+  MARKET = 1;
+  IMMEDIATE_OR_CANCEL = 2;
+}
+
+// Representation of an incoming stock/token trade order
+message OrderRequest {
+  string order_id = 1;         // Unique alphanumeric ID
+  string client_id = 2;        // Initiating client's identifier
+  string symbol = 3;           // Asset symbol (e.g., BTCUSDT, AAPL)
+  OrderSide side = 4;          // Buy or Sell side
+  OrderType type = 5;          // Execution constraint
+  double price = 6;            // Limit price (ignored for pure MARKET orders)
+  double quantity = 7;         // Quantity requested
+  int64 timestamp_ns = 8;      // Epoch timestamp in nanoseconds for latency auditing
+}
+
+// Result of submitting/matching an order
+message OrderResponse {
+  string order_id = 1;         // Original order ID
+  string status = 2;           // Matching status (e.g., FULLY_FILLED, PARTIALLY_FILLED, REJECTED)
+  double filled_quantity = 3;  // Actual quantity executed
+  double average_price = 4;    // Executed average price
+  int64 latency_ns = 5;        // System matching latency calculated in nanoseconds
+  string engine_instance = 6;  // Host or container identifier that ran the execution
+}
+
+// High-performance batch request for portfolio index updates or massive order books
+message BatchOrderRequest {
+  repeated OrderRequest orders = 1;
+}
+
+message BatchOrderResponse {
+  repeated OrderResponse responses = 1;
+  int64 total_processed = 2;
+}
+
+// High-Frequency Order Matching Engine Service Interface
+service OrderMatchingService {
+  // Submits a single order for real-time high-throughput matching
+  rpc SubmitOrder(OrderRequest) returns (OrderResponse);
+
+  // Submits a batch of orders for high-performance vectorized execution
+  rpc SubmitBatchOrders(BatchOrderRequest) returns (BatchOrderResponse);
+}
